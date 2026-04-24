@@ -30,7 +30,7 @@ Think of it as a baby version of GPT. It doesn't know much, but it built itself 
 ## 🗂️ Project Structure
 
 ```
-toddler-llm/
+Toddler-LLM/
 │
 ├── tod.py       # Main script (full pipeline)
 ├── model_analysis.xlsx  # Output predictions (auto-generated)
