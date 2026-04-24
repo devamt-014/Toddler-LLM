@@ -32,7 +32,7 @@ Think of it as a baby version of GPT. It doesn't know much, but it built itself 
 ```
 toddler-llm/
 │
-├── toddler_llm.py       # Main script (full pipeline)
+├── tod.py       # Main script (full pipeline)
 ├── model_analysis.xlsx  # Output predictions (auto-generated)
 ├── requirements.txt     # Dependencies
 └── README.md
