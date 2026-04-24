@@ -44,8 +44,8 @@ toddler-llm/
 
 ### 1. Clone the repo
 ```bash
-git clone https://github.com/your-username/toddler-llm.git
-cd toddler-llm
+git clone https://github.com/devamt-014/Toddler-LLM.git
+cd Toddler-LLM
 ```
 
 ### 2. Install dependencies
@@ -55,7 +55,7 @@ pip install -r requirements.txt
 
 ### 3. Run the model
 ```bash
-python toddler_llm.py
+python tod.py
 ```
 
 The script will train the model and print next-word predictions.  
