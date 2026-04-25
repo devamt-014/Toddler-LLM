@@ -123,7 +123,7 @@ openpyxl
 - [x] **v1.0** — Vocabulary, tokenization, Linear model, basic training
 - [x] **v2.0** — LSTM, dropout, train/val split, PAD token, save/load
 - [ ] **v3.0** — Full chatbot with `generate_response()` and `<EOS>` token
-- [ ] **v3.0** — Beam search instead of argmax
+- [ ] **v3.1** — Beam search instead of argmax
 - [ ] **v4.0** — Attention mechanism (baby Transformer 👀)
 
 ---
