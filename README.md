@@ -25,7 +25,7 @@ Think of it as a baby version of GPT. It doesn't know much, but it built itself 
 - ✅ **`clean_input()`** — handles contractions and real world typing
 - ✅ **Realistic data section** — handles casual responses like "cool", "lol", "wow"
 - ✅ **Special token leak fix** — `<SOS>`, `<PAD>`, `<UNK>` filtered from responses
-- ✅ **500 epochs** — best training run yet
+- ✅ **350 epochs** — best training run yet
 
 ---
 
