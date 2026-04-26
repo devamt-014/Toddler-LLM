@@ -1,243 +1,116 @@
 import torch
+import torch.nn as nn
+import random
+from datasets import pairs
 
-#DATA INPUTS
-sentences = [
+# ─────────────────────────────
+# GPU SETUP
+# ─────────────────────────────
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Using device: {device}")
 
-    # 🔹 Basic questions
-    "how are you ?",
-    "how are you doing ?",
-    "how are things ?",
-    "what is your name ?",
-    "where are you from ?",
-    "how old are you ?",
-    "what do you do ?",
-    "can you help me ?",
-    "do you understand ?",
-
-    # 🔹 Responses
-    "i am good",
-    "i am fine",
-    "i am better",
-    "i am great",
-    "i am great !",
-    "i am feeling good today",
-    "i am feeling great today",
-    "i am happy",
-    "i am sad",
-    "i am tired",
-    "i am bored",
-    "i am excited",
-    "i am angry",
-    "i feel lonely",
-    "i am great today!",
-    "i am doing great !",
-
-    # 🔹 Greetings
-    "hello",
-    "hello you",
-    "hello you !",
-    "hello there",
-    "hello friend",
-    "hi there",
-    "hi buddy",
-    "hi there friend",
-    "hi there buddy",
-    "hi how are you",
-
-    # 🔹 Goodbyes
-    "goodbye",
-    "bye",
-    "ok bye",
-    "see you next time",
-    "see you later",
-    "bye bye",
-    "goodbye friend",
-    "ok goodbye",
-    "bye for now",
-    "bye take care",
-    "ok bye bye",
-
-    # 🔹 Time questions
-    "what time is it ?",
-    "what is the time ?",
-
-    # 🔹 Time answers
-    "it is morning",
-    "it is evening",
-    "it is night",
-
-    # 🔹 Time variations
-    "time to go out",
-    "time flies fast",
-    "time doesnt wait",
-    "time doesnt wait for anyone",
-
-    # 🔹 Weather (NEW)
-    "it is raining",
-    "it is sunny",
-    "it is cold today",
-    "it is hot outside",
-    "the weather is nice",
-
-    # 🔹 Short affirmations (NEW)
-    "yes",
-    "no",
-    "maybe",
-    "sure",
-    "of course",
-    "i think so",
-    "i dont know",
-
-    # 🔹 Short casual phrases
-    "whats up",
-    "not much",
-    "all good",
-    "doing great",
-
-    # 🔹 Multi-sentence flows
-    "how are you ? i am fine",
-    "how are you ? i am great",
-    "how are you doing ? i am good",
-
-    # 🔹 Chat-style
-    "user: how are you ?",
-    "assistant: i am fine",
-
-    "user: what time is it ?",
-    "assistant: it is night",
-
-    "user: hello",
-    "assistant: hello there",
-
-    "user: hi",
-    "assistant: hi there",
-
-    "user: what is your name ?",
-    "assistant: i am toddler llm",
-
-    "user: can you help me ?",
-    "assistant: yes i can",
-
-    "user: are you smart ?",
-    "assistant: i am learning",
-
-    "user: how are you feeling ?",
-    "assistant: i am feeling great today",
-
-    "user: what is the weather ?",
-    "assistant: it is sunny",
-
-    # 🔹 Noise / real-world typing
-    "how r you",
-    "im good",
-    "im fine",
-    "ok thanks",
-
-    # 🔹 Edge / ambiguity
-    "what ?",
-    
-    # 🔹 Emotion follow ups
-    "i am sad today",
-    "i am sad sometimes",
-    "i am tired today",
-    "i am tired now",
-    "i am bored today",
-    "i am bored now",
-    "i am angry today",
-    "i am angry now",
-    "i am happy today",
-    "i am happy now",
-    "i am excited today",
-    "i am excited now",
-    
-    # 🔹 Advanced Emotion follow ups
-    "i am sad today",
-    "i am sad always",
-    "i am tired today",
-    "i am bored today",
-    "i am so bored",
-    "i am a bit angry now",
-    "i am so happy now",
-    "i am really excited today",
-    "i am really happy today",
-    "i am really sad today"
-]
-
-
-#SPLITTING UNIQUELY ALL WORDS 
+# ─────────────────────────────
+# VOCABULARY
+# ─────────────────────────────
 words = set()
 
-for sentence in sentences:
-    for word in sentence.split():
-        words.add(word) 
+for input_s, output_s in pairs:
+    for word in input_s.split():
+        words.add(word)
+    for word in output_s.split():
+        words.add(word)
 
-words.add("<UNK>")
 words.add("<PAD>")
+words.add("<UNK>")
+words.add("<SOS>")
+words.add("<EOS>")
+
 words = sorted(list(words))
 words.remove("<PAD>")
 words = ["<PAD>"] + words
 
-#MAPPINGS
+# ─────────────────────────────
+# MAPPINGS
+# ─────────────────────────────
 words_to_idx = {word: i for i, word in enumerate(words)}
 idx_to_words = {i: word for i, word in enumerate(words)}
 
+# ─────────────────────────────
+# ENCODE PAIRS
+# ─────────────────────────────
+# Each pair becomes one full sequence:
+# "how are you ? <SOS> i am fine <EOS>"
+encoded_sequences = []
 
-#SENTENCES TO NUMBERS 
-encoded_sentences = []
+for input_s, output_s in pairs:
+    input_enc  = [words_to_idx[w] for w in input_s.split()]
+    output_enc = [words_to_idx.get(w, words_to_idx["<UNK>"]) 
+                  for w in output_s.split()]
+    
+    sos = words_to_idx["<SOS>"]
+    eos = words_to_idx["<EOS>"]
+    
+    full_sequence = input_enc + [sos] + output_enc + [eos]
+    encoded_sequences.append(full_sequence)
 
-for sentence in sentences:
-    encoded = [words_to_idx[word] for word in sentence.split()]
-    encoded_sentences.append(encoded)
-    
-    
-    
-#TRAIN/VAL SPLIT 
-import random
+# ─────────────────────────────
+# TRAIN/VAL SPLIT
+# ─────────────────────────────
 random.seed(42)
-random.shuffle(encoded_sentences)
-split = int(0.9 * len(encoded_sentences))
-train_sentences = encoded_sentences[:split]
-val_sentences = encoded_sentences[split:]
+random.shuffle(encoded_sequences)
 
-#TAINING DATA
+split = int(1.0 * len(encoded_sequences))
+train_sequences = encoded_sequences[:split]
+val_sequences   = encoded_sequences[split:]
+
+# ─────────────────────────────
+# TRAINING DATA
+# ─────────────────────────────
 X_train, y_train = [], []
-for sentence in train_sentences:
-    for i in range(1, len(sentence)):
-        X_train.append(sentence[:i])
-        y_train.append(sentence[i])
+for seq in train_sequences:
+    for i in range(1, len(seq)):
+        X_train.append(seq[:i])
+        y_train.append(seq[i])
 
 X_val, y_val = [], []
-for sentence in val_sentences:
-    for i in range(1, len(sentence)):
-        X_val.append(sentence[:i])
-        y_val.append(sentence[i])
-        
-        
-#PADDING
+for seq in val_sequences:
+    for i in range(1, len(seq)):
+        X_val.append(seq[:i])
+        y_val.append(seq[i])
+
+# ─────────────────────────────
+# PADDING
+# ─────────────────────────────
 max_len = max(len(seq) for seq in X_train)
 
 X_train_padded = [[0] * (max_len - len(s)) + s for s in X_train]
-X_val_padded = [[0] * (max_len - len(s)) + s for s in X_val]
+X_val_padded   = [[0] * (max_len - len(s)) + s for s in X_val]
 
-# TENSORS
-X_train_tensor = torch.tensor(X_train_padded)
-y_train_tensor = torch.tensor(y_train)
-X_val_tensor = torch.tensor(X_val_padded)
-y_val_tensor = torch.tensor(y_val)
+# ─────────────────────────────
+# TENSORS → GPU
+# ─────────────────────────────
+X_train_tensor = torch.tensor(X_train_padded, dtype=torch.long).to(device)
+y_train_tensor = torch.tensor(y_train, dtype=torch.long).to(device)
 
+if len(X_val_padded) == 0:
+        X_val_tensor = X_train_tensor[:5]
+        y_val_tensor = y_train_tensor[:5]
+else:
+    X_val_tensor   = torch.tensor(X_val_padded, dtype=torch.long).to(device)
+    y_val_tensor   = torch.tensor(y_val, dtype=torch.long).to(device)
 
-#OWN TINY LLM MODEL (BRAIN)
-import torch.nn as nn
-
+# ─────────────────────────────
+# MODEL
+# ─────────────────────────────
 class TinyLM(nn.Module):
     def __init__(self, vocab_size):
         super().__init__()
-        self.embedding = nn.Embedding(vocab_size, 64)
-        self.dropout = nn.Dropout(0.5)
-        self.lstm = nn.LSTM(64,128, batch_first=True)
-        self.fc = nn.Linear(128, vocab_size)
-        
-    def forward(self,x):
+        self.embedding = nn.Embedding(vocab_size, 128)
+        self.dropout   = nn.Dropout(0.5)
+        self.lstm      = nn.LSTM(128, 256, batch_first=True)
+        self.fc        = nn.Linear(256, vocab_size)
+
+    def forward(self, x):
         x = self.embedding(x)
         x = self.dropout(x)
         x, (hidden, cell) = self.lstm(x)
@@ -245,114 +118,104 @@ class TinyLM(nn.Module):
         x = self.fc(x)
         return x
 
-
-#INITALIZING THE MODEL    
+# ─────────────────────────────
+# INITIALIZE
+# ─────────────────────────────
 vocab_size = len(words)
+model      = TinyLM(vocab_size).to(device)
+loss_fn    = nn.CrossEntropyLoss()
+optimizer  = torch.optim.Adam(model.parameters(), lr=0.001)
 
-model = TinyLM(vocab_size)
-loss_fn = nn.CrossEntropyLoss()
-optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-
-
-for epoch in range(150):
-    # Training
+# ─────────────────────────────
+# TRAINING LOOP
+# ─────────────────────────────
+for epoch in range(350):
     model.train()
     optimizer.zero_grad()
     output = model(X_train_tensor)
-    loss = loss_fn(output, y_train_tensor)
+    loss   = loss_fn(output, y_train_tensor)
     loss.backward()
     optimizer.step()
 
-    # Validation
     model.eval()
     with torch.no_grad():
         val_output = model(X_val_tensor)
-        val_loss = loss_fn(val_output, y_val_tensor)
+        val_loss   = loss_fn(val_output, y_val_tensor)
 
     if epoch % 50 == 0:
         print(f"Epoch {epoch} | Train Loss: {loss.item():.4f} | Val Loss: {val_loss.item():.4f}")
 
-torch.save(model.state_dict(), "toddler_llm_v2.pth")
+torch.save(model.state_dict(), "toddler_llm_v3.pth")
 print("Model saved!")
-        
-        
-def predict_next(text):
-    tokens = [words_to_idx.get(word, words_to_idx["<UNK>"]) for word in text.split()]
-    tokens = tokens[-max_len:]
-    tokens = [0] * (max_len - len(tokens)) + tokens
-    x = torch.tensor([tokens])
 
-    with torch.no_grad():
-        output = model(x)
-        predicted = torch.argmax(output, dim=1).item()
-
-    return idx_to_words[predicted] 
-
-
-test_inputs = [
-    # Basic questions
-    "how", "how are", "how are you",
-    "how are you doing", "how are things",
-
-    # Responses
-    "i", "i am", "i am great", "i am fine",
-    "i am feeling", "i am feeling good",
-    "i feel",
-
-    # Emotions
-    "i am happy", "i am sad", "i am tired",
-    "i am bored", "i am excited", "i am angry",
+# ─────────────────────────────
+# GENERATE RESPONSE
+# ─────────────────────────────
+def generate_response(text, max_response_len=10):
+    model.eval()
     
-    # Emotion follow ups (NEW)
-    "i am sad today", "i am sad always",
-    "i am so bored", "i am so tired",
-    "i am a bit", "i am really",
-    "i am really excited", "i am really happy",
+    tokens = [words_to_idx.get(w, words_to_idx["<UNK>"]) 
+              for w in text.split()]
+    tokens += [words_to_idx["<SOS>"]]
+    
+    response = []
 
-    # Greetings
-    "hello", "hello you", "hello there",
-    "hello friend", "hi", "hi there",
+    for _ in range(max_response_len):
+        padded = tokens[-max_len:]
+        padded = [0] * (max_len - len(padded)) + padded
+        x = torch.tensor([padded]).to(device)
 
-    # Goodbyes
-    "goodbye", "bye", "bye bye",
-    "goodbye friend", "goodbye for",
-    "ok", "ok bye", "ok goodbye",
-    "see", "see you", "see you next",
-    "see you later",
+        with torch.no_grad():
+            output    = model(x)
+            predicted = torch.argmax(output, dim=1).item()
 
-    # Time questions
-    "what time", "what time is",
-    "what is", "what is the",
-    "it", "it is",
+        word = idx_to_words[predicted]
 
-    # Time variations
-    "time", "time to", "time flies",
-    "time doesnt", "time doesnt wait",
+        if word in ["<EOS>", "<SOS>", "<PAD>", "<UNK>"]:
+            break
 
-    # Weather
-    "the", "the weather",
-    "it is raining", "it is cold",
+        response.append(word)
+        tokens.append(predicted)
 
-    # Short affirmations
-    "yes", "no", "maybe",
-    "of", "i think", "i dont",
+    return " ".join(response) if response else "i am not that capable enough yet to understand what are you saying sorry !"
 
-    # Casual
-    "whats", "not", "all", "doing",
 
-    # Chat style
-    "user:", "user: how", "user: what",
-    "user: hello", "user: hi",
-    "assistant:", "assistant: i",
-    "assistant: hello",
 
-    # Noise
-    "how r", "im", "ok",
+# ─────────────────────────────
+# INPUT CLEANER
+# ─────────────────────────────
+def clean_input(text):
+    text = text.replace("i'm", "i am")
+    text = text.replace("don't", "do not")
+    text = text.replace("can't", "can not")
+    text = text.replace("won't", "will not")
+    text = text.replace("it's", "it is")
+    text = text.replace("what's", "what is")
+    text = text.replace("i've", "i have")
+    text = text.replace("i'd", "i would")
+    text = text.replace("i'll", "i will")
+    text = text.replace("you're", "you are")
+    text = text.replace("that's", "that is")
+    text = text.replace("morning", "good morning")
+    text = text.replace("afternoon", "good afternoon")
+    text = text.replace("evening", "good evening")
+    return text
 
-    # Edge
-    "what ?", "why", "unknown"
-]
+# ─────────────────────────────
+# LIVE CHAT
+# ─────────────────────────────
+print("\nToddler LLM v3.0 — Let's chat ! 🍼")
+print("Type 'bye' to exit\n")
 
-for inp in test_inputs:
-    result = predict_next(inp)
-    print(f"{inp} : {result}")
+while True:
+    user_input = clean_input(input("You: ").strip().lower())
+    
+    if user_input == "bye":
+        print("Toddler: goodbye take care !")
+        break
+    
+    if user_input == "":
+        continue
+    
+    response = generate_response(user_input)
+    print(f"Toddler: {response}\n")
