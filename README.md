@@ -1,43 +1,44 @@
-# 🍼 Toddler LLM v2.0
+# 🍼 Toddler LLM v3.0
 
-A tiny next-word predictor built completely from scratch using Python and PyTorch.  
+A tiny chatbot built completely from scratch using Python and PyTorch.  
 No libraries. No pretrained models. Just raw learning.
 
 ---
 
 ## 🧠 What Is This?
 
-**Toddler LLM** is a minimal language model that predicts the next word in a sentence.  
-It was built as a first step into understanding how large language models work under the hood —  
-starting from vocabulary creation, tokenization, model design, training, all the way to inference.
+**Toddler LLM** is a minimal language model that started as a next-word predictor and has now grown into a real chatbot.  
+It was built as a step-by-step journey into understanding how large language models work under the hood —  
+from vocabulary creation, tokenization, model design, training, all the way to live conversation.
 
 Think of it as a baby version of GPT. It doesn't know much, but it built itself from nothing. 🐣
 
 ---
 
-## ⚙️ How It Works
+## 🆕 What's New in v3.0
 
-1. **Vocabulary** — All unique words from the training sentences are extracted and sorted
-2. **Tokenization** — Words are mapped to integer indices with proper `<PAD>` and `<UNK>` tokens
-3. **Training Data** — Sequences are created using a sliding window (input → next word)
-4. **Model** — A custom `nn.Module` with Embedding + Dropout + LSTM + Linear layer
-5. **Training** — 150 epochs using CrossEntropyLoss + Adam optimizer with train/val split
-6. **Inference** — Given a prompt, predicts the most likely next word
-7. **Export** — Predictions saved to an Excel file using `openpyxl`
+- ✅ **Live chatbot** — real conversation instead of static predictions
+- ✅ **`generate_response()`** — generates full sentences word by word
+- ✅ **`<SOS>` and `<EOS>` tokens** — model knows when to start and stop
+- ✅ **GPU support** — runs on CUDA (GTX 1650 tested)
+- ✅ **External dataset** — moved to `datasets.py` as input/output pairs
+- ✅ **`clean_input()`** — handles contractions and real world typing
+- ✅ **Realistic data section** — handles casual responses like "cool", "lol", "wow"
+- ✅ **Special token leak fix** — `<SOS>`, `<PAD>`, `<UNK>` filtered from responses
+- ✅ **500 epochs** — best training run yet
 
 ---
 
-## 🆕 What's New in v2.0
+## ⚙️ How It Works
 
-- ✅ Replaced flat Linear layer with **LSTM** — model now has sequence memory
-- ✅ Added proper **`<PAD>` token** at index 0 — no more fake data during padding
-- ✅ Added **Dropout (0.5)** — reduces overfitting
-- ✅ Added **train/val split (90/10)** — now tracks generalization vs memorization
-- ✅ Fixed **`optimizer.zero_grad()` order** — correct gradient clearing
-- ✅ Added **input length guard** in `predict_next()` — no more silent crashes
-- ✅ Added **save/load model weights** — no retraining every run
-- ✅ Expanded dataset to **~100 sentences** — emotions, weather, affirmations and more
-- ✅ Cleaner prediction output format — `input : predicted`
+1. **Vocabulary** — All unique words from pairs extracted with `<PAD>`, `<UNK>`, `<SOS>`, `<EOS>`
+2. **Tokenization** — Words mapped to integer indices
+3. **Dataset** — Input/output conversation pairs stored in `datasets.py`
+4. **Training Data** — Pairs encoded as full sequences with sliding window
+5. **Model** — Embedding (128) + Dropout (0.5) + LSTM (256) + Linear
+6. **Training** — 500 epochs, CrossEntropyLoss + Adam, train/val split, GPU
+7. **Generation** — `generate_response()` predicts word by word until `<EOS>`
+8. **Chat** — Live chat loop in terminal
 
 ---
 
@@ -46,9 +47,9 @@ Think of it as a baby version of GPT. It doesn't know much, but it built itself 
 ```
 TODDLER-LLM/
 │
-├── tod.py                    # Main script (full pipeline)
-├── toddler_llm_v2.pth        # Saved model weights (auto-generated)
-├── model_analysis.xlsx       # Output predictions (auto-generated)
+├── tod.py                    # Main model + training + chat loop
+├── datasets.py               # Conversation pairs dataset
+├── toddler_llm_v3.pth        # Saved model weights (auto-generated)
 ├── requirements.txt          # Dependencies
 └── README.md
 ```
@@ -73,8 +74,7 @@ pip install -r requirements.txt
 python tod.py
 ```
 
-The script will train the model and print next-word predictions.  
-A `toddler_llm_v2.pth` and `model_analysis.xlsx` will also be generated.
+The model will train and launch a live chat session in your terminal.
 
 ---
 
@@ -87,34 +87,41 @@ openpyxl
 
 ---
 
-## 🧪 Example Predictions
+## 💬 Example Chat
 
-| Input | Predicted Next Word |
-|-------|-------------------|
-| `how are` | `you` |
-| `i feel` | `lonely` |
-| `hi` | `there` |
-| `see you next` | `time` |
-| `what time is` | `it` |
-| `time flies` | `fast` |
-| `of` | `course` |
-| `i dont` | `know` |
-| `i think` | `so` |
-| `doing` | `great` |
+```
+You: good morning !
+Toddler: good morning ! how are you today ?
+
+You: i am feeling sad
+Toddler: i am sorry hope things get better !
+
+You: what is your name ?
+Toddler: i am toddler llm nice to meet you !
+
+You: what can you do ?
+Toddler: i can chat with you and predict next words !
+
+You: cool !
+Toddler: glad you think so !
+
+You: bye
+Toddler: goodbye take care !
+```
 
 ---
 
-## 📊 v1 vs v2
+## 📊 Version Comparison
 
-| | v1 | v2 |
-|--|--|--|
-| Architecture | Linear | LSTM |
-| Val Loss | ~6.87 | ~2.71 |
-| Dropout | ❌ | ✅ |
-| Train/Val Split | ❌ | ✅ |
-| PAD token | ❌ | ✅ |
-| Save/Load weights | ❌ | ✅ |
-| Good predictions | ~40% | ~80% |
+| | v1 | v2 | v3 |
+|--|--|--|--|
+| Architecture | Linear | LSTM | LSTM + GPU |
+| Val Loss | ~6.87 | ~2.71 | ~0.35 |
+| Output | one word | one word | full sentence |
+| Interaction | static | static | live chat |
+| Dataset | sentences | sentences | conversation pairs |
+| Tokens | PAD, UNK | PAD, UNK | PAD, UNK, SOS, EOS |
+| GPU | ❌ | ❌ | ✅ |
 
 ---
 
@@ -122,26 +129,33 @@ openpyxl
 
 - [x] **v1.0** — Vocabulary, tokenization, Linear model, basic training
 - [x] **v2.0** — LSTM, dropout, train/val split, PAD token, save/load
-- [ ] **v3.0** — Full chatbot with `generate_response()` and `<EOS>` token
+- [x] **v3.0** — Live chatbot, SOS/EOS tokens, GPU, generate_response()
 - [ ] **v3.1** — Beam search instead of argmax
-- [ ] **v4.0** — Attention mechanism (baby Transformer 👀)
+- [ ] **v4.0** — BiLSTM (research backed 🔥)
+- [ ] **v5.0** — Streamlit UI + Hugging Face deployment 🌍
+- [ ] **v6.0** — Custom tokenizer, subword tokenization
+- [ ] **v7.0** — Attention mechanism
+- [ ] **v8.0** — Baby Transformer
+- [ ] **v9.0** — Fine tune on real data
+- [ ] **v10.0** — Full grown LLM 👨
 
 ---
 
 ## 💡 What I Learned
 
-- How vocabulary and tokenization work from scratch
-- What `<PAD>` and `<UNK>` tokens are and why they matter
-- How LSTM works — hidden state, forget/input/output gates
-- How train/val split catches overfitting
-- How dropout forces generalization
-- The full ML pipeline: data → model → train → validate → infer → export
+- How `<SOS>` and `<EOS>` tokens control generation
+- How `generate_response()` builds sentences word by word
+- How to move tensors and models to GPU with CUDA
+- How conversation pairs differ from single sentence training
+- How `clean_input()` handles real world typing
+- The difference between next word prediction and full response generation
 
 ---
 
 ## 🙌 Acknowledgements
 
-Built with curiosity, PyTorch, and a lot of `print()` statements.
+Built with curiosity, PyTorch, and a lot of `print()` statements.  
+Tested by real people who asked it about relationships and got coding advice. 😄
 
 ---
 
