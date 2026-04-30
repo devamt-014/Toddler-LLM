@@ -46,7 +46,6 @@ TODDLER-LLM/
 │
 ├── tod.py                    # Training + model + saving
 ├── run.py                    # Load model + live chat
-├── data.py                   # Custom conversation pairs
 ├── toddler_llm_v4.pth        # Saved model + vocab (auto-generated)
 ├── requirements.txt          # Dependencies
 └── README.md
