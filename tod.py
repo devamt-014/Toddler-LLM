@@ -1,7 +1,53 @@
 import torch
 import torch.nn as nn
 import random
-from datasets import pairs
+import yaml
+import chatterbot_corpus
+import os
+
+# ─────────────────────────────
+# LOAD DATASET
+# ─────────────────────────────
+def load_pairs():
+    path = os.path.dirname(chatterbot_corpus.__file__)
+    english_path = os.path.join(path, "data", "english")
+    
+    files = [
+        "greetings.yml",
+        "conversations.yml",
+        "emotion.yml",
+        "ai.yml",
+        "botprofile.yml",
+        "humor.yml",
+        "food.yml",
+        "health.yml",
+        "computers.yml",
+        "tech_support.yml"
+    ]
+    
+    pairs = []
+    
+    for filename in files:
+        filepath = os.path.join(english_path, filename)
+        with open(filepath, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+        
+        for convo in data["conversations"]:
+            for i in range(len(convo) - 1):
+                input_s  = str(convo[i]).strip().lower()
+                output_s = str(convo[i+1]).strip().lower()
+                
+                if not input_s or not output_s:
+                    continue
+                if len(input_s.split()) > 30 or len(output_s.split()) > 30:
+                    continue
+                    
+                pairs.append((input_s, output_s))
+    
+    print(f"Loaded {len(pairs)} conversation pairs")
+    return pairs
+
+pairs = load_pairs()
 
 # ─────────────────────────────
 # GPU SETUP
@@ -9,9 +55,10 @@ from datasets import pairs
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
-# ─────────────────────────────
+# ───────────────────────────── 
 # VOCABULARY
 # ─────────────────────────────
+print("Building vocabulary...")
 words = set()
 
 for input_s, output_s in pairs:
@@ -29,6 +76,8 @@ words = sorted(list(words))
 words.remove("<PAD>")
 words = ["<PAD>"] + words
 
+print(f"Vocabulary size: {len(words)}")
+
 # ─────────────────────────────
 # MAPPINGS
 # ─────────────────────────────
@@ -38,18 +87,18 @@ idx_to_words = {i: word for i, word in enumerate(words)}
 # ─────────────────────────────
 # ENCODE PAIRS
 # ─────────────────────────────
-# Each pair becomes one full sequence:
-# "how are you ? <SOS> i am fine <EOS>"
+print("Encoding pairs...")
 encoded_sequences = []
 
 for input_s, output_s in pairs:
-    input_enc  = [words_to_idx[w] for w in input_s.split()]
-    output_enc = [words_to_idx.get(w, words_to_idx["<UNK>"]) 
+    input_enc  = [words_to_idx.get(w, words_to_idx["<UNK>"])
+                  for w in input_s.split()]
+    output_enc = [words_to_idx.get(w, words_to_idx["<UNK>"])
                   for w in output_s.split()]
-    
+
     sos = words_to_idx["<SOS>"]
     eos = words_to_idx["<EOS>"]
-    
+
     full_sequence = input_enc + [sos] + output_enc + [eos]
     encoded_sequences.append(full_sequence)
 
@@ -59,13 +108,14 @@ for input_s, output_s in pairs:
 random.seed(42)
 random.shuffle(encoded_sequences)
 
-split = int(1.0 * len(encoded_sequences))
+split = int(0.9 * len(encoded_sequences))
 train_sequences = encoded_sequences[:split]
 val_sequences   = encoded_sequences[split:]
 
 # ─────────────────────────────
 # TRAINING DATA
 # ─────────────────────────────
+print("Building training data...")
 X_train, y_train = [], []
 for seq in train_sequences:
     for i in range(1, len(seq)):
@@ -81,40 +131,47 @@ for seq in val_sequences:
 # ─────────────────────────────
 # PADDING
 # ─────────────────────────────
+print("Padding sequences...")
 max_len = max(len(seq) for seq in X_train)
 
-X_train_padded = [[0] * (max_len - len(s)) + s for s in X_train]
-X_val_padded   = [[0] * (max_len - len(s)) + s for s in X_val]
+
+X_train_padded = [[0] * (max_len - len(s[-max_len:])) + s[-max_len:] 
+                  for s in X_train]
+X_val_padded   = [[0] * (max_len - len(s[-max_len:])) + s[-max_len:] 
+                  for s in X_val]
 
 # ─────────────────────────────
 # TENSORS → GPU
 # ─────────────────────────────
+print("Moving tensors to GPU...")
 X_train_tensor = torch.tensor(X_train_padded, dtype=torch.long).to(device)
-y_train_tensor = torch.tensor(y_train, dtype=torch.long).to(device)
+y_train_tensor = torch.tensor(y_train,        dtype=torch.long).to(device)
 
+# guard — if val is empty use small slice of train
 if len(X_val_padded) == 0:
-        X_val_tensor = X_train_tensor[:5]
-        y_val_tensor = y_train_tensor[:5]
+    X_val_tensor = X_train_tensor[:5]
+    y_val_tensor = y_train_tensor[:5]
 else:
-    X_val_tensor   = torch.tensor(X_val_padded, dtype=torch.long).to(device)
-    y_val_tensor   = torch.tensor(y_val, dtype=torch.long).to(device)
+    X_val_tensor = torch.tensor(X_val_padded, dtype=torch.long)
+    y_val_tensor = torch.tensor(y_val,        dtype=torch.long)
 
 # ─────────────────────────────
-# MODEL
+# BiLSTM MODEL
 # ─────────────────────────────
 class TinyLM(nn.Module):
     def __init__(self, vocab_size):
         super().__init__()
         self.embedding = nn.Embedding(vocab_size, 128)
         self.dropout   = nn.Dropout(0.5)
-        self.lstm      = nn.LSTM(128, 256, batch_first=True)
-        self.fc        = nn.Linear(256, vocab_size)
+        self.lstm      = nn.LSTM(128, 256, batch_first=True,
+                                 bidirectional=True)        # ✅ BiLSTM
+        self.fc        = nn.Linear(512, vocab_size)         # ✅ 256*2
 
     def forward(self, x):
         x = self.embedding(x)
         x = self.dropout(x)
         x, (hidden, cell) = self.lstm(x)
-        x = hidden[-1]
+        x = torch.cat((hidden[-2], hidden[-1]), dim=1)      # ✅ concat
         x = self.fc(x)
         return x
 
@@ -126,96 +183,58 @@ model      = TinyLM(vocab_size).to(device)
 loss_fn    = nn.CrossEntropyLoss()
 optimizer  = torch.optim.Adam(model.parameters(), lr=0.001)
 
+print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
+
 # ─────────────────────────────
 # TRAINING LOOP
 # ─────────────────────────────
-for epoch in range(350):
-    model.train()
-    optimizer.zero_grad()
-    output = model(X_train_tensor)
-    loss   = loss_fn(output, y_train_tensor)
-    loss.backward()
-    optimizer.step()
+print("Training started...")
 
+batch_size = 64
+
+for epoch in range(300):
+    model.train()
+    
+    # mini batches
+    perm = torch.randperm(X_train_tensor.size(0))
+    total_loss = 0
+    
+    for i in range(0, X_train_tensor.size(0), batch_size):
+        idx = perm[i:i+batch_size]
+        X_batch = X_train_tensor[idx]
+        y_batch = y_train_tensor[idx]
+        
+        optimizer.zero_grad()
+        output = model(X_batch)
+        loss   = loss_fn(output, y_batch)
+        loss.backward()
+        optimizer.step()
+        total_loss += loss.item()
+    
+    avg_loss = total_loss / (X_train_tensor.size(0) // batch_size)
+    
     model.eval()
     with torch.no_grad():
-        val_output = model(X_val_tensor)
-        val_loss   = loss_fn(val_output, y_val_tensor)
-
+        val_x = X_val_tensor[:256].to(device)
+        val_y = y_val_tensor[:256].to(device)
+        val_output = model(val_x)
+        val_loss   = loss_fn(val_output, val_y)
+    
+    
+    del val_x, val_y
+    torch.cuda.empty_cache()
     if epoch % 50 == 0:
-        print(f"Epoch {epoch} | Train Loss: {loss.item():.4f} | Val Loss: {val_loss.item():.4f}")
-
-torch.save(model.state_dict(), "toddler_llm_v3.pth")
-print("Model saved!")
+        print(f"Epoch {epoch} | Train Loss: {avg_loss:.4f} | Val Loss: {val_loss.item():.4f}")
 
 # ─────────────────────────────
-# GENERATE RESPONSE
+# SAVE
 # ─────────────────────────────
-def generate_response(text, max_response_len=10):
-    model.eval()
-    
-    tokens = [words_to_idx.get(w, words_to_idx["<UNK>"]) 
-              for w in text.split()]
-    tokens += [words_to_idx["<SOS>"]]
-    
-    response = []
+torch.save({
+    "model_state": model.state_dict(),
+    "words_to_idx": words_to_idx,
+    "idx_to_words": idx_to_words,
+    "max_len": max_len,
+    "vocab_size": vocab_size
+}, "toddler_llm_v4.pth")
 
-    for _ in range(max_response_len):
-        padded = tokens[-max_len:]
-        padded = [0] * (max_len - len(padded)) + padded
-        x = torch.tensor([padded]).to(device)
-
-        with torch.no_grad():
-            output    = model(x)
-            predicted = torch.argmax(output, dim=1).item()
-
-        word = idx_to_words[predicted]
-
-        if word in ["<EOS>", "<SOS>", "<PAD>", "<UNK>"]:
-            break
-
-        response.append(word)
-        tokens.append(predicted)
-
-    return " ".join(response) if response else "i am not that capable enough yet to understand what are you saying sorry !"
-
-
-
-# ─────────────────────────────
-# INPUT CLEANER
-# ─────────────────────────────
-def clean_input(text):
-    text = text.replace("i'm", "i am")
-    text = text.replace("don't", "do not")
-    text = text.replace("can't", "can not")
-    text = text.replace("won't", "will not")
-    text = text.replace("it's", "it is")
-    text = text.replace("what's", "what is")
-    text = text.replace("i've", "i have")
-    text = text.replace("i'd", "i would")
-    text = text.replace("i'll", "i will")
-    text = text.replace("you're", "you are")
-    text = text.replace("that's", "that is")
-    text = text.replace("morning", "good morning")
-    text = text.replace("afternoon", "good afternoon")
-    text = text.replace("evening", "good evening")
-    return text
-
-# ─────────────────────────────
-# LIVE CHAT
-# ─────────────────────────────
-print("\nToddler LLM v3.0 — Let's chat ! 🍼")
-print("Type 'bye' to exit\n")
-
-while True:
-    user_input = clean_input(input("You: ").strip().lower())
-    
-    if user_input == "bye":
-        print("Toddler: goodbye take care !")
-        break
-    
-    if user_input == "":
-        continue
-    
-    response = generate_response(user_input)
-    print(f"Toddler: {response}\n")
+print("Model saved! → toddler_llm_v4.pth")
