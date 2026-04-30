@@ -1,2 +1,3 @@
 torch
-openpyxl
+chatterbot-corpus
+pyyaml
